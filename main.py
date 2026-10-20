@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-
+from database_validator import validate_database
 from risk_engine import Release, analyze_release
 
 app = FastAPI(
@@ -18,6 +18,10 @@ class ReleaseRequest(BaseModel):
     previous_deployment_failed: bool
     security_check_passed: bool
 
+class DatabaseValidationRequest(BaseModel):
+    old_columns: list[str]
+    new_columns: list[str]
+    sql_script: str = "" 
 
 @app.get("/")
 def home():
@@ -36,3 +40,11 @@ def health():
 def analyze(request: ReleaseRequest):
     release = Release(**request.model_dump())
     return analyze_release(release)
+
+@app.post("/database/validate")
+def database_validate(request: DatabaseValidationRequest):
+    return validate_database(
+        old_columns=request.old_columns,
+        new_columns=request.new_columns,
+        sql_script=request.sql_script,
+    )
