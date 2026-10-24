@@ -48,3 +48,32 @@ def database_validate(request: DatabaseValidationRequest):
         new_columns=request.new_columns,
         sql_script=request.sql_script,
     )
+@app.post("/risk-awareness")
+def risk_awareness(request: ReleaseRequest):
+    release = Release(**request.model_dump())
+    result = analyze_release(release)
+    return {
+        "project": "Risk-Aware CI/CD Pipeline",
+        "risk_assessment": result,
+        "deployment_decision": result["decision"],
+    }
+
+
+class ApprovalRequest(BaseModel):
+    approved: bool
+
+
+@app.post("/approve")
+def approve_release(request: ApprovalRequest):
+    if request.approved:
+        return {
+            "approval_status": "APPROVED",
+            "deployment_decision": "DEPLOY",
+            "message": "Release approved for deployment",
+        }
+
+    return {
+        "approval_status": "REJECTED",
+        "deployment_decision": "BLOCK",
+        "message": "Release rejected; deployment blocked",
+    }
