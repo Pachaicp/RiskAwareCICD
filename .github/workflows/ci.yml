@@ -6,6 +6,27 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      code_change_size:
+        description: "Number of changed lines (prototype input)"
+        required: true
+        default: "10"
+        type: string
+      database_breaking_change:
+        description: "Does this release contain a breaking database change?"
+        required: true
+        default: false
+        type: boolean
+      previous_deployment_failed:
+        description: "Did the previous deployment fail?"
+        required: true
+        default: false
+        type: boolean
+      security_check_passed:
+        description: "Did the security check pass?"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -41,7 +62,9 @@ jobs:
     name: Evaluate release risk
     needs: test
     runs-on: ubuntu-latest
-
+    outputs:
+      risk_level: ${{ steps.evaluate.outputs.risk_level }}
+      decision: ${{ steps.evaluate.outputs.decision }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -52,8 +75,15 @@ jobs:
           python-version: "3.12"
 
       - name: Evaluate LOW, MEDIUM, and HIGH scenarios
+        id: evaluate
+        env:
+          INPUT_CODE_CHANGE_SIZE: ${{ github.event.inputs.code_change_size || '10' }}
+          INPUT_DATABASE_BREAKING_CHANGE: ${{ github.event.inputs.database_breaking_change || 'false' }}
+          INPUT_PREVIOUS_DEPLOYMENT_FAILED: ${{ github.event.inputs.previous_deployment_failed || 'false' }}
+          INPUT_SECURITY_CHECK_PASSED: ${{ github.event.inputs.security_check_passed || 'true' }}
         run: |
           python - <<'PYTHON'
+          import os
           from risk_engine import Release, analyze_release
 
           scenarios = [
@@ -77,5 +107,53 @@ jobs:
                       f"{name} failed: expected {expected[name]}, got {actual}"
                   )
 
+          def as_bool(value):
+              return value.strip().lower() == "true"
+
+          code_change_size = int(os.environ["INPUT_CODE_CHANGE_SIZE"])
+          if code_change_size < 0:
+              raise SystemExit("Code change size cannot be negative.")
+
+          release = Release(
+              code_change_size=code_change_size,
+              tests_passed=True,
+              database_breaking_change=as_bool(
+                  os.environ["INPUT_DATABASE_BREAKING_CHANGE"]
+              ),
+              previous_deployment_failed=as_bool(
+                  os.environ["INPUT_PREVIOUS_DEPLOYMENT_FAILED"]
+              ),
+              security_check_passed=as_bool(
+                  os.environ["INPUT_SECURITY_CHECK_PASSED"]
+              ),
+          )
+          result = analyze_release(release)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"risk_level={result['risk_level']}\n")
+              output.write(f"decision={result['decision']}\n")
+
+          print("Selected release assessment:", result)
           print("All risk-gate scenarios passed.")
           PYTHON
+
+  medium-risk-approval:
+    name: Wait for medium-risk approval
+    needs: risk-gate
+    if: needs.risk-gate.outputs.risk_level == 'MEDIUM'
+    runs-on: ubuntu-latest
+    environment: medium-risk-approval
+    steps:
+      - name: Confirm approval gate
+        run: echo "Medium-risk release approved. No deployment was performed."
+
+  high-risk-block:
+    name: Block high-risk release
+    needs: risk-gate
+    if: needs.risk-gate.outputs.risk_level == 'HIGH'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop high-risk release
+        run: |
+          echo "HIGH risk detected. Release is blocked."
+          exit 1
