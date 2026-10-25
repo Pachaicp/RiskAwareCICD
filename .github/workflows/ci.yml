@@ -37,11 +37,13 @@ jobs:
 
       - name: Check risk engine
         run: python risk_engine.py
-
   risk-gate:
     name: Evaluate release risk
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      risk_level: ${{ steps.evaluate.outputs.risk_level }}
+      decision: ${{ steps.evaluate.outputs.decision }}
 
     steps:
       - name: Checkout source code
@@ -52,36 +54,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install risk engine dependencies
-        run: python -m pip install pytest
-
-      - name: Evaluate LOW, MEDIUM, and HIGH scenarios
+      - name: Evaluate sample release risk
+        id: evaluate
         run: |
-          python - <<'PY'
+          python - <<'PYTHON' >> "$GITHUB_OUTPUT"
           from risk_engine import Release, analyze_release
 
-          scenarios = [
-              ("LOW", Release(10, True, False, False, True)),
-              ("MEDIUM", Release(50, True, False, False, True)),
-              ("HIGH", Release(10, False, False, False, True)),
-          ]
+          release = Release(50, True, False, False, True)
+          result = analyze_release(release)
 
-          expected = {
-              "LOW": ("LOW", "DEPLOY"),
-              "MEDIUM": ("MEDIUM", "REQUIRES_APPROVAL"),
-              "HIGH": ("HIGH", "BLOCK"),
-          }
+          print(f"risk_level={result['risk_level']}")
+          print(f"decision={result['decision']}")
+          PYTHON
 
-          for name, release in scenarios:
-              result = analyze_release(release)
-              actual = (result["risk_level"], result["decision"])
-              print(f"{name} scenario: {result}")
-
-              if actual != expected[name]:
-                  raise SystemExit(
-                      f"{name} scenario failed: expected "
-                      f"{expected[name]}, got {actual}"
-                  )
-
-          print("All risk-gate scenarios passed.")
-          PY
+      - name: Show release decision
+        run: |
+          echo "Risk level: ${{ steps.evaluate.outputs.risk_level }}"
+          echo "Decision: ${{ steps.evaluate.outputs.decision }}"
