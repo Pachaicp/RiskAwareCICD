@@ -41,9 +41,6 @@ jobs:
     name: Evaluate release risk
     needs: test
     runs-on: ubuntu-latest
-    outputs:
-      risk_level: ${{ steps.evaluate.outputs.risk_level }}
-      decision: ${{ steps.evaluate.outputs.decision }}
 
     steps:
       - name: Checkout source code
@@ -54,20 +51,31 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Evaluate sample release risk
-        id: evaluate
+      - name: Evaluate LOW, MEDIUM, and HIGH scenarios
         run: |
-          python - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          python - <<'PYTHON'
           from risk_engine import Release, analyze_release
 
-          release = Release(50, True, False, False, True)
-          result = analyze_release(release)
+          scenarios = [
+              ("LOW", Release(10, True, False, False, True)),
+              ("MEDIUM", Release(50, True, False, False, True)),
+              ("HIGH", Release(10, False, False, False, True)),
+          ]
 
-          print(f"risk_level={result['risk_level']}")
-          print(f"decision={result['decision']}")
+          expected = {
+              "LOW": ("LOW", "DEPLOY"),
+              "MEDIUM": ("MEDIUM", "REQUIRES_APPROVAL"),
+              "HIGH": ("HIGH", "BLOCK"),
+          }
+
+          for name, release in scenarios:
+              result = analyze_release(release)
+              actual = (result["risk_level"], result["decision"])
+              print(f"{name}: {result}")
+              if actual != expected[name]:
+                  raise SystemExit(
+                      f"{name} failed: expected {expected[name]}, got {actual}"
+                  )
+
+          print("All risk-gate scenarios passed.")
           PYTHON
-
-      - name: Show release decision
-        run: |
-          echo "Risk level: ${{ steps.evaluate.outputs.risk_level }}"
-          echo "Decision: ${{ steps.evaluate.outputs.decision }}"
