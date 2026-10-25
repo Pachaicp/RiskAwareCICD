@@ -1,4 +1,3 @@
-
 name: Risk-Aware CI Pipeline
 
 on:
@@ -28,9 +27,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi "uvicorn[standard]" pytest httpx
+          pip install fastapi "uvicorn[standard]" pytest httpx pandas sqlalchemy
 
-      - name: Run automated tests   
+      - name: Run automated tests
         run: python -m pytest -v
 
       - name: Check API imports
@@ -38,3 +37,51 @@ jobs:
 
       - name: Check risk engine
         run: python risk_engine.py
+
+  risk-gate:
+    name: Evaluate release risk
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install risk engine dependencies
+        run: python -m pip install pytest
+
+      - name: Evaluate LOW, MEDIUM, and HIGH scenarios
+        run: |
+          python - <<'PY'
+          from risk_engine import Release, analyze_release
+
+          scenarios = [
+              ("LOW", Release(10, True, False, False, True)),
+              ("MEDIUM", Release(50, True, False, False, True)),
+              ("HIGH", Release(10, False, False, False, True)),
+          ]
+
+          expected = {
+              "LOW": ("LOW", "DEPLOY"),
+              "MEDIUM": ("MEDIUM", "REQUIRES_APPROVAL"),
+              "HIGH": ("HIGH", "BLOCK"),
+          }
+
+          for name, release in scenarios:
+              result = analyze_release(release)
+              actual = (result["risk_level"], result["decision"])
+              print(f"{name} scenario: {result}")
+
+              if actual != expected[name]:
+                  raise SystemExit(
+                      f"{name} scenario failed: expected "
+                      f"{expected[name]}, got {actual}"
+                  )
+
+          print("All risk-gate scenarios passed.")
+          PY
