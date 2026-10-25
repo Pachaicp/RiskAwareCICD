@@ -22,9 +22,13 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "Checking EC2 hostname..."
+          echo "Host: $EC2_HOST"
+          echo "User: $EC2_USER"
 
-          ssh -i ~/.ssh/deploy_key \
+          ssh-keyscan -T 10 -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -vv -i ~/.ssh/deploy_key \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
