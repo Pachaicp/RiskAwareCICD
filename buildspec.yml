@@ -1,0 +1,27 @@
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - python --version
+      - pip install --upgrade pip
+      - pip install fastapi uvicorn pandas pytest httpx sqlalchemy
+
+  pre_build:
+    commands:
+      - echo "Starting Risk-Aware CI/CD tests"
+
+  build:
+    commands:
+      - pytest -v
+
+artifacts:
+  files:
+    - '**/*'
+  exclude-paths:
+    - '.git/**/*'
+    - '.venv/**/*'
+    - '__pycache__/**/*'
