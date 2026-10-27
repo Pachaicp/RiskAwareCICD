@@ -1,16 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUNDLE_DIR="$(dirname "$SCRIPT_DIR")"
+: "${DEPLOYMENT_GROUP_ID:?Missing CodeDeploy deployment group ID}"
+: "${DEPLOYMENT_ID:?Missing CodeDeploy deployment ID}"
 
-echo "Validating Risk-Aware CI/CD revision bundle..."
+ARCHIVE="/opt/codedeploy-agent/deployment-root/${DEPLOYMENT_GROUP_ID}/${DEPLOYMENT_ID}/deployment-archive"
+
+echo "Validating CodeDeploy deployment archive: $ARCHIVE"
+
+if [ ! -d "$ARCHIVE" ]; then
+    echo "ERROR: Deployment archive not found."
+    exit 1
+fi
 
 for file in main.py risk_engine.py database_validator.py appspec.yml; do
-    if [ ! -f "$BUNDLE_DIR/$file" ]; then
+    if [ ! -f "$ARCHIVE/$file" ]; then
         echo "ERROR: Required file missing: $file"
         exit 1
     fi
 done
 
-echo "Validation successful: required files are present."
+echo "Validation successful: required files are present in the deployment archive."
